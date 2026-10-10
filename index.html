@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>영양성분표 만들기 — 배합표로 계산하는 영양정보 라벨</title>
+<meta name="description" content="배합표(원재료와 중량)만 입력하면 식약처 식품영양성분 DB로 영양성분을 계산하고, 표시기준의 반올림 규칙을 적용한 영양정보 도안을 만들어 줍니다.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>영양성분표 만들기</h1>
+  <p>배합표를 넣으면 식약처 식품영양성분 DB로 계산하고, 표시기준의 단위·반올림 규칙을 적용한 <b>영양정보 도안</b>을 만듭니다.</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>1. 제품 정보</h2>
+    <div class="grid">
+      <label>제품명<input id="productName" type="text" placeholder="예: 우리밀 쿠키"></label>
+      <label>1포장 내용량 (g 또는 ml)<input id="packAmount" type="number" min="0" step="any" placeholder="예: 120"></label>
+      <label>내용량 단위
+        <select id="packUnit"><option value="g">g</option><option value="ml">ml</option></select>
+      </label>
+      <label>표시 단위
+        <select id="basis">
+          <option value="total">총 내용량당</option>
+          <option value="per100">100g(ml)당</option>
+          <option value="unit">단위 내용량당 (개·조각)</option>
+        </select>
+      </label>
+      <label id="unitCountWrap" hidden>1포장에 든 개수<input id="unitCount" type="number" min="1" step="1" placeholder="예: 6"></label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>2. 배합표</h2>
+    <p class="hint">한 번 만들 때 넣는 원재료와 중량을 적습니다. 원재료를 검색해 고르거나, 납품받은 원료의 성분표가 있으면 <b>성분값</b>을 눌러 100g당 값을 직접 넣으세요.</p>
+    <div id="items"></div>
+    <button id="addItem" class="ghost" type="button">+ 원재료 추가</button>
+
+    <div class="grid yield">
+      <label>배합 중량 합계<output id="mixWeight">0 g</output></label>
+      <label>완성품 총 중량 (g)
+        <input id="finalWeight" type="number" min="0" step="any" placeholder="비우면 배합 합계와 같음">
+      </label>
+    </div>
+    <p class="hint">굽거나 졸이면 수분이 날아가 같은 무게당 영양성분이 진해집니다. 완성 후 전체 무게를 재서 넣으면 반영됩니다.</p>
+  </section>
+
+  <section class="panel result">
+    <h2>3. 결과</h2>
+    <div id="warnings"></div>
+    <div class="result-body">
+      <div>
+        <div id="label" class="label-box"></div>
+        <div class="actions">
+          <button id="downloadPng" type="button">PNG 저장</button>
+          <button id="downloadSvg" class="ghost" type="button">SVG 저장</button>
+        </div>
+      </div>
+      <div class="side">
+        <h3>원재료명 (많이 넣은 순)</h3>
+        <p id="ingredientList" class="copy"></p>
+        <h3>계산값 (반올림 전)</h3>
+        <table id="rawTable"></table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel notice">
+    <h2>꼭 확인하세요</h2>
+    <ul>
+      <li>이 도구는 원재료 영양성분 DB로 <b>계산한 값</b>을 보여 줍니다. 식약처 안내서는 DB를 활용한 산출도 표시에 쓸 수 있다고 안내하지만, 표시한 값은 실제 측정값과 비교해 <b>허용오차 범위</b> 안이어야 하며 그 책임은 영업자에게 있습니다.</li>
+      <li>허용오차: 열량·나트륨·당류·지방·트랜스지방·포화지방·콜레스테롤은 실제 측정값이 표시량의 120% 미만, 탄수화물·단백질은 표시량의 80% 이상이어야 합니다.</li>
+      <li>튀김의 기름 흡수, 절임의 염분 변화처럼 조리 과정에서 성분이 달라지는 제품은 계산값이 실제와 크게 다를 수 있습니다. 이런 제품은 시험·검사기관 분석을 권합니다.</li>
+      <li>즉석판매제조·가공업 영업자가 만든 식품, 주표시면 30㎠ 이하 포장 등은 영양표시 의무에서 제외됩니다. 의무 대상 여부는 관할 지자체나 식약처에 확인하세요.</li>
+    </ul>
+    <p class="source">영양성분 자료: <span id="dbSource"></span> · 기준일 <span id="dbDate"></span> · 수록 <span id="dbCount"></span>건<br>
+    표시 규칙 근거: 식품의약품안전처 「한눈에 보는 영양표시 가이드라인(민원인 안내서)」(2024.12), 「식품등의 표시기준」.</p>
+  </section>
+</main>
+
+<template id="itemTemplate">
+  <div class="item">
+    <div class="item-main">
+      <div class="search">
+        <input class="name" type="text" placeholder="원재료 검색 (예: 박력밀가루, 백설탕)" autocomplete="off">
+        <ul class="suggest" hidden></ul>
+      </div>
+      <input class="grams" type="number" min="0" step="any" placeholder="g">
+      <button class="toggle ghost" type="button">성분값</button>
+      <button class="remove ghost" type="button" aria-label="삭제">×</button>
+    </div>
+    <div class="missing"></div>
+    <div class="values" hidden>
+      <p class="hint">100g(ml)당 값입니다. 비어 있는 칸은 "자료 없음"으로, 계산에서 0으로 처리됩니다.</p>
+      <div class="values-grid"></div>
+    </div>
+  </div>
+</template>
+
+<script src="db.js"></script>
+<script src="calc.js"></script>
+<script src="label.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
